@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class HomePage extends StatefulWidget {
+import '../../domain/entities/media_item.dart';
+import 'home_controller.dart';
+
+class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  ConsumerState<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends ConsumerState<HomePage> {
   final _controller = TextEditingController();
 
   @override
@@ -16,27 +20,90 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
-  bool _looksLikeUrl(String value) {
-    final uri = Uri.tryParse(value.trim());
-    return uri != null && (uri.scheme == 'http' || uri.scheme == 'https') && uri.host.isNotEmpty;
-  }
-
-  void _validateLink() {
+  Future<void> _analyze() async {
     final value = _controller.text.trim();
-    if (!_looksLikeUrl(value)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('أدخل رابطاً صحيحاً يبدأ بـ http أو https.')),
-      );
+    if (value.isEmpty) {
+      _showMessage('أدخل رابط المحتوى أولاً.');
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('الرابط صالح مبدئياً. تحليل المصدر سيُربط بمحرك المصادر في المرحلة التالية.')),
+
+    ref.read(homeAnalysisProvider.notifier).state = const AsyncLoading();
+    try {
+      final media = await ref.read(analyzeMediaUrlProvider)(value);
+      if (!mounted) return;
+      ref.read(homeAnalysisProvider.notifier).state = AsyncData(media);
+      await _showMediaDetails(media);
+    } catch (error) {
+      if (!mounted) return;
+      ref.read(homeAnalysisProvider.notifier).state = AsyncError(error, StackTrace.current);
+      _showMessage(_friendlyError(error));
+    }
+  }
+
+  Future<void> _showMediaDetails(MediaItem media) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) {
+        final theme = Theme.of(context);
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('تم تحليل المحتوى', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 18),
+                Card(
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: theme.colorScheme.primaryContainer,
+                      child: Icon(Icons.music_note, color: theme.colorScheme.onPrimaryContainer),
+                    ),
+                    title: Text(media.title),
+                    subtitle: Text(media.sourceUrl, maxLines: 2, overflow: TextOverflow.ellipsis),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.download_outlined),
+                    label: const Text('متابعة التنزيل'),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'التنزيل الفعلي سيُضاف بعد تحديد مسار التخزين وصيغة الملف.',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
+  }
+
+  String _friendlyError(Object error) {
+    if (error is UnsupportedError) return 'هذا المصدر غير مدعوم حاليًا.';
+    if (error is FormatException) return error.message.toString();
+    if (error is StateError) return error.message;
+    return 'تعذر تحليل الرابط. تحقق منه وحاول مرة أخرى.';
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final analysis = ref.watch(homeAnalysisProvider);
+
     return SafeArea(
       child: CustomScrollView(
         slivers: [
@@ -65,18 +132,20 @@ class _HomePageState extends State<HomePage> {
                             keyboardType: TextInputType.url,
                             textDirection: TextDirection.ltr,
                             decoration: const InputDecoration(
-                              hintText: 'https://example.com/media',
+                              hintText: 'https://example.com/media.mp3',
                               prefixIcon: Icon(Icons.link),
                             ),
-                            onSubmitted: (_) => _validateLink(),
+                            onSubmitted: (_) => _analyze(),
                           ),
                           const SizedBox(height: 12),
                           SizedBox(
                             width: double.infinity,
                             child: FilledButton.icon(
-                              onPressed: _validateLink,
-                              icon: const Icon(Icons.manage_search),
-                              label: const Text('تحليل الرابط'),
+                              onPressed: analysis.isLoading ? null : _analyze,
+                              icon: analysis.isLoading
+                                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                                  : const Icon(Icons.manage_search),
+                              label: Text(analysis.isLoading ? 'جارٍ التحليل...' : 'تحليل الرابط'),
                             ),
                           ),
                         ],
