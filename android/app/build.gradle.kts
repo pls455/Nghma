@@ -7,7 +7,7 @@ plugins {
 android {
     namespace = "com.pls455.naghama"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -20,7 +20,7 @@ android {
 
     defaultConfig {
         applicationId = "com.pls455.naghama"
-        minSdk = flutter.minSdkVersion
+        minSdk = 24
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
