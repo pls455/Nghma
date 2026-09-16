@@ -28,7 +28,7 @@ class AppTheme {
       navigationBarTheme: NavigationBarThemeData(
         height: 72,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        indicatorShape: RoundedRectangleBorder(
+        indicatorShape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.all(Radius.circular(16)),
         ),
       ),
@@ -44,7 +44,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(18),
-          borderSide: BorderSide(width: 1.5),
+          borderSide: const BorderSide(width: 1.5),
         ),
       ),
       cardTheme: CardThemeData(
