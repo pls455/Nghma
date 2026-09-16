@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -27,7 +26,8 @@ class DownloadEngine {
       options: Options(
         responseType: ResponseType.stream,
         followRedirects: true,
-        validateStatus: (status) => status != null && status >= 200 && status < 400,
+        validateStatus: (status) =>
+            status != null && status >= 200 && status < 400,
         headers: existingBytes > 0 ? {'Range': 'bytes=$existingBytes-'} : null,
       ),
     );
@@ -40,16 +40,17 @@ class DownloadEngine {
     final resumed = existingBytes > 0 && response.statusCode == 206;
     final initialBytes = resumed ? existingBytes : 0;
 
-    // Some servers ignore Range and return 200. In that case the partial file
-    // must be replaced rather than corrupted by appending a second copy.
+    // Some servers ignore Range and return 200. Replace the partial file
+    // instead of appending a second copy to it.
     if (!resumed && existingBytes > 0) {
       await partFile.writeAsBytes(const <int>[], flush: true);
     }
 
-    final responseLength = body.contentLength;
-    final totalBytes = responseLength >= 0
-        ? initialBytes + responseLength
-        : _totalFromContentRange(response.headers, initialBytes, responseLength);
+    final totalBytes = _resolveTotalBytes(
+      headers: response.headers,
+      responseLength: body.contentLength,
+      initialBytes: initialBytes,
+    );
     var downloaded = initialBytes;
 
     final sink = partFile.openWrite(
@@ -89,16 +90,17 @@ class DownloadEngine {
     );
   }
 
-  int? _totalFromContentRange(
-    Headers headers,
-    int initialBytes,
-    int responseLength,
-  ) {
+  int? _resolveTotalBytes({
+    required Headers headers,
+    required int responseLength,
+    required int initialBytes,
+  }) {
+    if (responseLength >= 0) return initialBytes + responseLength;
+
     final values = headers['content-range'];
     if (values == null || values.isEmpty) return null;
     final match = RegExp(r'/([0-9]+)$').firstMatch(values.first);
-    if (match == null) return null;
-    return int.tryParse(match.group(1)!);
+    return match == null ? null : int.tryParse(match.group(1)!);
   }
 
   int _averageSpeed(int bytes, Duration elapsed) {
