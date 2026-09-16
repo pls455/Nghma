@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 
-import '../../domain/entities/download_task.dart';
 import 'player_controller.dart';
 
 class PlayerPage extends ConsumerWidget {
