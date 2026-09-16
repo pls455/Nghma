@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/repositories/sqlite_download_repository.dart';
 import '../../domain/entities/download_task.dart';
+import '../player/player_controller.dart';
 
 final libraryTasksProvider = FutureProvider.autoDispose<List<DownloadTask>>((ref) async {
   final repository = SqliteDownloadRepository();
@@ -55,12 +56,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'المكتبة',
-              style: theme.textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
+            Text('المكتبة', style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800)),
             const SizedBox(height: 16),
             TextField(
               controller: _searchController,
@@ -82,12 +78,8 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                     return task.media.title.toLowerCase().contains(_query);
                   }).toList();
 
-                  if (tasks.isEmpty) {
-                    return const _LibraryEmpty();
-                  }
-                  if (filtered.isEmpty) {
-                    return const Center(child: Text('لا توجد نتائج مطابقة.'));
-                  }
+                  if (tasks.isEmpty) return const _LibraryEmpty();
+                  if (filtered.isEmpty) return const Center(child: Text('لا توجد نتائج مطابقة.'));
 
                   return RefreshIndicator(
                     onRefresh: () async => ref.invalidate(libraryTasksProvider),
@@ -95,10 +87,10 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                       physics: const AlwaysScrollableScrollPhysics(),
                       itemCount: filtered.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (context, index) {
-                        final task = filtered[index];
-                        return _LibraryItem(task: task);
-                      },
+                      itemBuilder: (context, index) => _LibraryItem(
+                        task: filtered[index],
+                        queue: filtered,
+                      ),
                     ),
                   );
                 },
@@ -111,23 +103,21 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
   }
 }
 
-class _LibraryItem extends StatelessWidget {
-  const _LibraryItem({required this.task});
+class _LibraryItem extends ConsumerWidget {
+  const _LibraryItem({required this.task, required this.queue});
 
   final DownloadTask task;
+  final List<DownloadTask> queue;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     return Card(
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         leading: CircleAvatar(
           backgroundColor: theme.colorScheme.primaryContainer,
-          child: Icon(
-            Icons.music_note,
-            color: theme.colorScheme.onPrimaryContainer,
-          ),
+          child: Icon(Icons.music_note, color: theme.colorScheme.onPrimaryContainer),
         ),
         title: Text(
           task.media.title,
@@ -135,18 +125,19 @@ class _LibraryItem extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(fontWeight: FontWeight.w700),
         ),
-        subtitle: Text(
-          _formatSize(task.downloadedBytes),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
+        subtitle: Text(_formatSize(task.downloadedBytes)),
         trailing: IconButton(
-          tooltip: 'فتح الملف',
+          tooltip: 'تشغيل',
           icon: const Icon(Icons.play_arrow_rounded),
-          onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('المشغل المحلي قيد المرحلة التالية.')),
-            );
+          onPressed: () async {
+            try {
+              await ref.read(audioPlayerServiceProvider).playTask(task, queue: queue);
+            } catch (error) {
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('تعذر تشغيل الملف: $error')),
+              );
+            }
           },
         ),
       ),
@@ -172,10 +163,7 @@ class _LibraryEmpty extends StatelessWidget {
         children: [
           Icon(Icons.library_music_outlined, size: 56, color: theme.colorScheme.primary),
           const SizedBox(height: 14),
-          Text(
-            'مكتبتك فارغة حالياً',
-            style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-          ),
+          Text('مكتبتك فارغة حالياً', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: 6),
           const Text('التنزيلات المكتملة ستظهر هنا.'),
         ],
