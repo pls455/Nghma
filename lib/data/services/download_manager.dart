@@ -29,6 +29,21 @@ class DownloadManager {
     required MediaItem media,
     required String destinationPath,
   }) async {
+    final existing = await _repository.getAll();
+    final duplicate = existing.where((task) {
+      final sameSource = task.media.sourceUrl == media.sourceUrl;
+      final activeOrComplete = task.status != DownloadStatus.cancelled;
+      return sameSource && activeOrComplete;
+    }).firstOrNull;
+
+    if (duplicate != null) {
+      if (duplicate.status == DownloadStatus.failed ||
+          duplicate.status == DownloadStatus.paused) {
+        await resume(duplicate.id);
+      }
+      return duplicate.id;
+    }
+
     final now = DateTime.now();
     final id = '${now.microsecondsSinceEpoch}_${media.sourceUrl.hashCode}';
     final task = DownloadTask(
@@ -47,13 +62,18 @@ class DownloadManager {
   }
 
   Future<void> pause(String id) async {
-    final token = _tokens[id];
-    token?.cancel('paused');
     final task = await _repository.getById(id);
-    if (task == null) return;
+    if (task == null ||
+        (task.status != DownloadStatus.downloading &&
+            task.status != DownloadStatus.queued)) {
+      return;
+    }
+
+    _tokens[id]?.cancel('paused');
     await _repository.upsert(
       task.copyWith(
         status: DownloadStatus.paused,
+        speedBytesPerSecond: 0,
         updatedAt: DateTime.now(),
       ),
     );
@@ -66,9 +86,11 @@ class DownloadManager {
         task.status != DownloadStatus.failed) {
       return;
     }
+
     await _repository.upsert(
       task.copyWith(
         status: DownloadStatus.queued,
+        speedBytesPerSecond: 0,
         updatedAt: DateTime.now(),
         clearError: true,
       ),
@@ -91,6 +113,8 @@ class DownloadManager {
     await _repository.upsert(
       task.copyWith(
         status: DownloadStatus.cancelled,
+        downloadedBytes: 0,
+        speedBytesPerSecond: 0,
         updatedAt: DateTime.now(),
       ),
     );
@@ -102,18 +126,18 @@ class DownloadManager {
     try {
       while (_running.length < maxConcurrent) {
         final tasks = await _repository.getAll();
-        final queued = tasks.where(
-          (task) => task.status == DownloadStatus.queued,
-        );
-        final next = queued.firstWhere(
-          (task) => !_running.contains(task.id),
-          orElse: () => throw StateError('no queued task'),
-        );
+        final next = tasks
+            .where(
+              (task) =>
+                  task.status == DownloadStatus.queued &&
+                  !_running.contains(task.id),
+            )
+            .firstOrNull;
+        if (next == null) break;
+
         _running.add(next.id);
         unawaited(_run(next));
       }
-    } on StateError {
-      // Queue is empty. Nothing to schedule.
     } finally {
       _pumping = false;
     }
@@ -141,7 +165,9 @@ class DownloadManager {
         cancelToken: token,
         onProgress: (downloaded, total, speed) async {
           final current = await _repository.getById(task.id);
-          if (current == null) return;
+          if (current == null || current.status == DownloadStatus.cancelled) {
+            return;
+          }
           await _repository.upsert(
             current.copyWith(
               status: DownloadStatus.downloading,
@@ -154,25 +180,32 @@ class DownloadManager {
         },
       );
 
+      final currentBeforeComplete = await _repository.getById(task.id);
+      if (currentBeforeComplete == null ||
+          currentBeforeComplete.status == DownloadStatus.cancelled) {
+        return;
+      }
+
       final destination = File(task.destinationPath);
       final part = File(partPath);
+      if (!await part.exists()) {
+        throw const DownloadEngineException('ملف التنزيل المؤقت غير موجود.');
+      }
       if (await destination.exists()) {
         await destination.delete();
       }
       await part.rename(destination.path);
 
-      final current = await _repository.getById(task.id);
-      if (current != null) {
-        await _repository.upsert(
-          current.copyWith(
-            status: DownloadStatus.completed,
-            downloadedBytes: result.downloadedBytes,
-            totalBytes: result.totalBytes ?? current.totalBytes,
-            speedBytesPerSecond: 0,
-            updatedAt: DateTime.now(),
-          ),
-        );
-      }
+      await _repository.upsert(
+        currentBeforeComplete.copyWith(
+          status: DownloadStatus.completed,
+          downloadedBytes: result.downloadedBytes,
+          totalBytes: result.totalBytes ?? currentBeforeComplete.totalBytes,
+          speedBytesPerSecond: 0,
+          updatedAt: DateTime.now(),
+          clearError: true,
+        ),
+      );
     } on DioException catch (error) {
       final current = await _repository.getById(task.id);
       if (current != null) {
@@ -186,7 +219,7 @@ class DownloadManager {
           ),
         );
       }
-    } catch (error) {
+    } on DownloadEngineException catch (error) {
       final current = await _repository.getById(task.id);
       if (current != null) {
         await _repository.upsert(
@@ -194,7 +227,19 @@ class DownloadManager {
             status: DownloadStatus.failed,
             speedBytesPerSecond: 0,
             updatedAt: DateTime.now(),
-            errorMessage: error.toString(),
+            errorMessage: error.message,
+          ),
+        );
+      }
+    } catch (_) {
+      final current = await _repository.getById(task.id);
+      if (current != null) {
+        await _repository.upsert(
+          current.copyWith(
+            status: DownloadStatus.failed,
+            speedBytesPerSecond: 0,
+            updatedAt: DateTime.now(),
+            errorMessage: 'حدث خطأ أثناء التنزيل. حاول مرة أخرى.',
           ),
         );
       }
@@ -213,4 +258,8 @@ class DownloadManager {
     }
     return 'فشل التنزيل. حاول مرة أخرى.';
   }
+}
+
+extension<T> on Iterable<T> {
+  T? get firstOrNull => isEmpty ? null : first;
 }
