@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../downloads/downloads_page.dart';
 import '../home/home_page.dart';
 import '../library/library_page.dart';
+import '../player/mini_player.dart';
 import '../player/player_page.dart';
 import '../settings/settings_page.dart';
 
@@ -38,10 +39,16 @@ class _AppShellState extends State<AppShell> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         body: IndexedStack(index: _index, children: _pages),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: _index,
-          destinations: _destinations,
-          onDestinationSelected: (value) => setState(() => _index = value),
+        bottomNavigationBar: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            MiniPlayer(onOpenPlayer: () => setState(() => _index = 3)),
+            NavigationBar(
+              selectedIndex: _index,
+              destinations: _destinations,
+              onDestinationSelected: (value) => setState(() => _index = value),
+            ),
+          ],
         ),
       ),
     );
