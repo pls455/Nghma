@@ -26,20 +26,30 @@ class DownloadEngine {
       cancelToken: cancelToken,
       options: Options(
         responseType: ResponseType.stream,
+        followRedirects: true,
+        validateStatus: (status) => status != null && status >= 200 && status < 400,
         headers: existingBytes > 0 ? {'Range': 'bytes=$existingBytes-'} : null,
       ),
     );
 
+    final body = response.data;
+    if (body == null) {
+      throw const DownloadEngineException('لم يصل محتوى الملف من المصدر.');
+    }
+
     final resumed = existingBytes > 0 && response.statusCode == 206;
     final initialBytes = resumed ? existingBytes : 0;
+
+    // Some servers ignore Range and return 200. In that case the partial file
+    // must be replaced rather than corrupted by appending a second copy.
     if (!resumed && existingBytes > 0) {
       await partFile.writeAsBytes(const <int>[], flush: true);
     }
 
-    final responseLength = response.data?.contentLength ?? -1;
+    final responseLength = body.contentLength;
     final totalBytes = responseLength >= 0
         ? initialBytes + responseLength
-        : null;
+        : _totalFromContentRange(response.headers, initialBytes, responseLength);
     var downloaded = initialBytes;
 
     final sink = partFile.openWrite(
@@ -47,7 +57,8 @@ class DownloadEngine {
     );
 
     try {
-      await for (final chunk in response.data!.stream) {
+      await for (final chunk in body.stream) {
+        cancelToken.throwIfRequested();
         sink.add(chunk);
         downloaded += chunk.length;
 
@@ -66,15 +77,28 @@ class DownloadEngine {
       await sink.close();
     }
 
-    onProgress(downloaded, totalBytes, _averageSpeed(
+    final averageSpeed = _averageSpeed(
       downloaded - initialBytes,
       DateTime.now().difference(startedAt),
-    ));
+    );
+    onProgress(downloaded, totalBytes, averageSpeed);
 
     return DownloadResult(
       downloadedBytes: downloaded,
       totalBytes: totalBytes,
     );
+  }
+
+  int? _totalFromContentRange(
+    Headers headers,
+    int initialBytes,
+    int responseLength,
+  ) {
+    final values = headers['content-range'];
+    if (values == null || values.isEmpty) return null;
+    final match = RegExp(r'/([0-9]+)$').firstMatch(values.first);
+    if (match == null) return null;
+    return int.tryParse(match.group(1)!);
   }
 
   int _averageSpeed(int bytes, Duration elapsed) {
@@ -88,4 +112,13 @@ class DownloadResult {
 
   final int downloadedBytes;
   final int? totalBytes;
+}
+
+class DownloadEngineException implements Exception {
+  const DownloadEngineException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
 }
