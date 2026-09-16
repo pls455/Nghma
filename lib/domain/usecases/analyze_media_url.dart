@@ -19,7 +19,7 @@ class AnalyzeMediaUrl {
 
     final provider = providers.where((item) => item.supports(uri)).firstOrNull;
     if (provider == null) {
-      throw const UnsupportedError('المصدر غير مدعوم حالياً.');
+      throw UnsupportedError('المصدر غير مدعوم حالياً.');
     }
 
     if (!await provider.validateUrl(uri)) {
