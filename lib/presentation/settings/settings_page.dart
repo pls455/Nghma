@@ -12,9 +12,9 @@ class SettingsPage extends StatelessWidget {
         children: [
           Text('الإعدادات', style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800)),
           const SizedBox(height: 20),
-          Card(
+          const Card(
             child: Column(
-              children: const [
+              children: [
                 ListTile(leading: Icon(Icons.palette_outlined), title: Text('المظهر'), subtitle: Text('سيتم ربط خيارات المظهر المحفوظة لاحقاً')),
                 Divider(height: 1),
                 ListTile(leading: Icon(Icons.storage_outlined), title: Text('التخزين'), subtitle: Text('سيتم اختيار مجلد المكتبة عند إضافة مدير التنزيل')),
