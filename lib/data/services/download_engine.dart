@@ -40,8 +40,6 @@ class DownloadEngine {
     final resumed = existingBytes > 0 && response.statusCode == 206;
     final initialBytes = resumed ? existingBytes : 0;
 
-    // Some servers ignore Range and return 200. Replace the partial file
-    // instead of appending a second copy to it.
     if (!resumed && existingBytes > 0) {
       await partFile.writeAsBytes(const <int>[], flush: true);
     }
@@ -59,7 +57,12 @@ class DownloadEngine {
 
     try {
       await for (final chunk in body.stream) {
-        cancelToken.throwIfRequested();
+        if (cancelToken.isCancelled) {
+          throw DioException.requestCancelled(
+            requestOptions: response.requestOptions,
+            reason: cancelToken.cancelError?.message ?? 'تم إلغاء التنزيل.',
+          );
+        }
         sink.add(chunk);
         downloaded += chunk.length;
 
