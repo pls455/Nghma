@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/repositories/sqlite_download_repository.dart';
 import '../../data/services/download_manager.dart';
 import '../../data/services/media_storage_service.dart';
+import '../../domain/entities/media_format.dart';
 import '../../domain/entities/media_item.dart';
 import '../downloads/downloads_controller.dart';
 import 'home_controller.dart';
@@ -53,14 +54,24 @@ class _HomePageState extends ConsumerState<HomePage> {
     }
   }
 
-  Future<void> _startDownload(MediaItem media) async {
+  Future<void> _startDownload(MediaItem media, MediaFormat format) async {
     final storage = ref.read(mediaStorageServiceProvider);
     final manager = ref.read(homeDownloadManagerProvider);
+    final selectedMedia = MediaItem(
+      id: '${media.id}:${format.id}',
+      title: media.title,
+      sourceUrl: format.url,
+      mimeType: format.mimeType ?? media.mimeType,
+      duration: media.duration,
+      sizeBytes: format.sizeBytes ?? media.sizeBytes,
+      thumbnailUrl: media.thumbnailUrl,
+      formats: [format],
+    );
 
     try {
-      final destinationPath = await storage.createDestinationPath(media);
+      final destinationPath = await storage.createDestinationPath(selectedMedia);
       await manager.enqueue(
-        media: media,
+        media: selectedMedia,
         destinationPath: destinationPath,
       );
 
@@ -75,60 +86,131 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Future<void> _showMediaDetails(MediaItem media) async {
+    var type = media.videoFormats.isNotEmpty
+        ? MediaFormatType.video
+        : MediaFormatType.audio;
+
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
       builder: (context) {
-        final theme = Theme.of(context);
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'تم تحليل المحتوى',
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                Card(
-                  child: ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: theme.colorScheme.primaryContainer,
-                      child: Icon(
-                        Icons.music_note,
-                        color: theme.colorScheme.onPrimaryContainer,
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final formats = type == MediaFormatType.video
+                ? media.videoFormats
+                : media.audioFormats;
+            final selected = formats.isEmpty ? null : formats.first;
+
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'تم تحليل المحتوى',
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                    ),
+                    const SizedBox(height: 14),
+                    Card(
+                      child: ListTile(
+                        leading: const CircleAvatar(child: Icon(Icons.movie)),
+                        title: Text(media.title),
+                        subtitle: Text(
+                          media.sourceUrl,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ),
-                    title: Text(media.title),
-                    subtitle: Text(
-                      media.sourceUrl,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                    const SizedBox(height: 14),
+                    Text(
+                      'نوع التنزيل',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
                     ),
-                  ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ChoiceChip(
+                            label: const SizedBox(
+                              width: double.infinity,
+                              child: Center(child: Text('🎬 فيديو')),
+                            ),
+                            selected: type == MediaFormatType.video,
+                            onSelected: media.videoFormats.isEmpty
+                                ? null
+                                : (_) => setModalState(
+                                      () => type = MediaFormatType.video,
+                                    ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ChoiceChip(
+                            label: const SizedBox(
+                              width: double.infinity,
+                              child: Center(child: Text('🎵 صوت')),
+                            ),
+                            selected: type == MediaFormatType.audio,
+                            onSelected: media.audioFormats.isEmpty
+                                ? null
+                                : (_) => setModalState(
+                                      () => type = MediaFormatType.audio,
+                                    ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      'الجودة',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    const SizedBox(height: 8),
+                    if (formats.isEmpty)
+                      const Text('لا توجد صيغة متاحة لهذا النوع.')
+                    else
+                      InputDecorator(
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.high_quality_outlined),
+                        ),
+                        child: Text(selected?.label ?? 'جودة المصدر'),
+                      ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: selected == null
+                            ? null
+                            : () => _startDownload(media, selected),
+                        icon: const Icon(Icons.download_outlined),
+                        label: Text(
+                          type == MediaFormatType.video
+                              ? 'تنزيل الفيديو'
+                              : 'تنزيل النغمة',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'تظهر الجودات الفعلية التي يعيدها مصدر المحتوى فقط.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: () => _startDownload(media),
-                    icon: const Icon(Icons.download_outlined),
-                    label: const Text('بدء التنزيل'),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'سيُحفظ الملف داخل مساحة التطبيق المخصصة للتنزيلات.',
-                  style: theme.textTheme.bodySmall,
-                ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );
@@ -167,7 +249,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'نزّل ما تملك حق تنزيله، ثم احتفظ به في مكتبتك.',
+                    'الصق الرابط، اختر النوع والجودة، ثم نزّل الملف.',
                     style: theme.textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 28),
@@ -178,23 +260,18 @@ class _HomePageState extends ConsumerState<HomePage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'إضافة رابط',
+                            'رابط الفيديو',
                             style: theme.textTheme.titleLarge?.copyWith(
                               fontWeight: FontWeight.w700,
                             ),
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'الصق رابط المحتوى المسموح بتنزيله.',
-                            style: theme.textTheme.bodySmall,
-                          ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 12),
                           TextField(
                             controller: _controller,
                             keyboardType: TextInputType.url,
                             textDirection: TextDirection.ltr,
                             decoration: const InputDecoration(
-                              hintText: 'https://example.com/media.mp3',
+                              hintText: 'https://example.com/media.mp4',
                               prefixIcon: Icon(Icons.link),
                             ),
                             onSubmitted: (_) => _analyze(),
