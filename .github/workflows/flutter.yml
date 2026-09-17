@@ -38,14 +38,26 @@ jobs:
           set -euo pipefail
           flutter clean
           flutter pub get
-          flutter build apk --release
+          flutter build apk --release || true
 
           APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
           if [ ! -f "$APK_PATH" ]; then
-            echo "Expected APK not found. Searching build outputs..."
-            find build -type f -name '*.apk' -print
-            exit 1
+            echo "Flutter did not expose the APK at its usual path. Building directly with Gradle..."
+            cd android
+            ./gradlew :app:assembleRelease --stacktrace
+            cd ..
+
+            GRADLE_APK="$(find android/app/build/outputs/apk/release -type f -name '*.apk' -print -quit)"
+            if [ -z "$GRADLE_APK" ]; then
+              echo "No release APK was produced by Gradle. Searching all build outputs..."
+              find . -type f -name '*.apk' -print
+              exit 1
+            fi
+
+            mkdir -p build/app/outputs/flutter-apk
+            cp "$GRADLE_APK" "$APK_PATH"
           fi
+
           ls -lh "$APK_PATH"
 
       - name: Upload APK
