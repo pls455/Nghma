@@ -30,25 +30,19 @@ class YoutubeProvider implements ContentProvider {
     try {
       final video = await yt.videos.get(uri.toString());
       final manifest = await yt.videos.streams.getManifest(video.url);
-
       final formats = <MediaFormat>[];
 
-      // Muxed streams are directly downloadable playable video files.
-      // youtube_explode documents these as limited to roughly 360p30.
+      // Muxed streams include both video and audio, but are usually limited
+      // to lower resolutions.
       for (final stream in manifest.muxed) {
-        formats.add(
-          MediaFormat(
-            id: 'yt-muxed-${stream.tag}',
-            url: stream.url.toString(),
-            type: MediaFormatType.video,
-            label: stream.qualityLabel,
-            mimeType: _mimeForContainer(stream.container.name),
-            sizeBytes: stream.size.totalBytes,
-            bitrate: stream.bitrate.bitsPerSecond,
-            width: stream.videoResolution.width,
-            height: stream.videoResolution.height,
-          ),
-        );
+        formats.add(_videoFormat(stream, idPrefix: 'yt-muxed'));
+      }
+
+      // Video-only streams contain the higher resolutions. The download
+      // screen pairs the selected video stream with an audio-only stream and
+      // DownloadManager muxes them into one playable file.
+      for (final stream in manifest.videoOnly) {
+        formats.add(_videoFormat(stream, idPrefix: 'yt-video'));
       }
 
       for (final stream in manifest.audioOnly) {
@@ -58,7 +52,7 @@ class YoutubeProvider implements ContentProvider {
             url: stream.url.toString(),
             type: MediaFormatType.audio,
             label: stream.qualityLabel.isEmpty
-                ? '${(stream.bitrate.kiloBitsPerSecond).round()} kbps'
+                ? '${stream.bitrate.kiloBitsPerSecond.round()} kbps'
                 : stream.qualityLabel,
             mimeType: _mimeForContainer(stream.container.name, audio: true),
             sizeBytes: stream.size.totalBytes,
@@ -82,6 +76,20 @@ class YoutubeProvider implements ContentProvider {
     } finally {
       yt.close();
     }
+  }
+
+  MediaFormat _videoFormat(dynamic stream, {required String idPrefix}) {
+    return MediaFormat(
+      id: '$idPrefix-${stream.tag}',
+      url: stream.url.toString(),
+      type: MediaFormatType.video,
+      label: stream.qualityLabel,
+      mimeType: _mimeForContainer(stream.container.name),
+      sizeBytes: stream.size.totalBytes,
+      bitrate: stream.bitrate.bitsPerSecond,
+      width: stream.videoResolution.width,
+      height: stream.videoResolution.height,
+    );
   }
 
   String _mimeForContainer(String container, {bool audio = false}) {
