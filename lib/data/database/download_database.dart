@@ -15,13 +15,15 @@ class DownloadDatabase {
     final dbPath = path.join(databasesPath, 'naghama.db');
     final database = await openDatabase(
       dbPath,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE downloads (
             id TEXT PRIMARY KEY,
             title TEXT NOT NULL,
             source_url TEXT NOT NULL,
+            secondary_source_url TEXT,
+            secondary_size_bytes INTEGER,
             mime_type TEXT,
             duration_ms INTEGER,
             size_bytes INTEGER,
@@ -36,6 +38,16 @@ class DownloadDatabase {
             error_message TEXT
           )
         ''');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute(
+            'ALTER TABLE downloads ADD COLUMN secondary_source_url TEXT',
+          );
+          await db.execute(
+            'ALTER TABLE downloads ADD COLUMN secondary_size_bytes INTEGER',
+          );
+        }
       },
     );
     _database = database;
