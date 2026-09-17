@@ -1,3 +1,5 @@
+import 'media_format.dart';
+
 class MediaItem {
   const MediaItem({
     required this.id,
@@ -7,6 +9,7 @@ class MediaItem {
     this.duration,
     this.sizeBytes,
     this.thumbnailUrl,
+    this.formats = const [],
   });
 
   final String id;
@@ -16,4 +19,11 @@ class MediaItem {
   final Duration? duration;
   final int? sizeBytes;
   final String? thumbnailUrl;
+  final List<MediaFormat> formats;
+
+  List<MediaFormat> get videoFormats =>
+      formats.where((format) => format.type == MediaFormatType.video).toList();
+
+  List<MediaFormat> get audioFormats =>
+      formats.where((format) => format.type == MediaFormatType.audio).toList();
 }
