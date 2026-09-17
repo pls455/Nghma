@@ -19,6 +19,8 @@ class DownloadTask {
     required this.totalBytes,
     required this.createdAt,
     required this.updatedAt,
+    this.secondarySourceUrl,
+    this.secondarySizeBytes,
     this.speedBytesPerSecond = 0,
     this.errorMessage,
   });
@@ -29,10 +31,14 @@ class DownloadTask {
   final DownloadStatus status;
   final int downloadedBytes;
   final int? totalBytes;
+  final String? secondarySourceUrl;
+  final int? secondarySizeBytes;
   final int speedBytesPerSecond;
   final DateTime createdAt;
   final DateTime updatedAt;
   final String? errorMessage;
+
+  bool get requiresMuxing => secondarySourceUrl != null;
 
   double get progress {
     final total = totalBytes;
@@ -52,6 +58,8 @@ class DownloadTask {
     DownloadStatus? status,
     int? downloadedBytes,
     int? totalBytes,
+    String? secondarySourceUrl,
+    int? secondarySizeBytes,
     int? speedBytesPerSecond,
     DateTime? updatedAt,
     String? errorMessage,
@@ -64,6 +72,8 @@ class DownloadTask {
       status: status ?? this.status,
       downloadedBytes: downloadedBytes ?? this.downloadedBytes,
       totalBytes: totalBytes ?? this.totalBytes,
+      secondarySourceUrl: secondarySourceUrl ?? this.secondarySourceUrl,
+      secondarySizeBytes: secondarySizeBytes ?? this.secondarySizeBytes,
       speedBytesPerSecond:
           speedBytesPerSecond ?? this.speedBytesPerSecond,
       createdAt: createdAt,
