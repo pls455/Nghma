@@ -39,13 +39,10 @@ class DownloadManager {
     final duplicate = existing.where((task) {
       final samePrimary = task.media.sourceUrl == media.sourceUrl;
       final sameSecondary = task.secondarySourceUrl == secondarySourceUrl;
-      final activeOrComplete = task.status != DownloadStatus.cancelled;
-      return samePrimary && sameSecondary && activeOrComplete;
+      return samePrimary && sameSecondary && task.status != DownloadStatus.cancelled;
     }).firstOrNull;
-
     if (duplicate != null) {
-      if (duplicate.status == DownloadStatus.failed ||
-          duplicate.status == DownloadStatus.paused) {
+      if (duplicate.status == DownloadStatus.failed || duplicate.status == DownloadStatus.paused) {
         await resume(duplicate.id);
       }
       return duplicate.id;
@@ -53,10 +50,10 @@ class DownloadManager {
 
     final now = DateTime.now();
     final id = '${now.microsecondsSinceEpoch}_${media.sourceUrl.hashCode}';
-    final total = media.sizeBytes == null || secondarySizeBytes == null
-        ? media.sizeBytes
-        : media.sizeBytes! + secondarySizeBytes;
-    final task = DownloadTask(
+    final total = media.sizeBytes != null && secondarySizeBytes != null
+        ? media.sizeBytes! + secondarySizeBytes
+        : media.sizeBytes;
+    await _repository.upsert(DownloadTask(
       id: id,
       media: media,
       destinationPath: destinationPath,
@@ -67,8 +64,7 @@ class DownloadManager {
       secondarySizeBytes: secondarySizeBytes,
       createdAt: now,
       updatedAt: now,
-    );
-    await _repository.upsert(task);
+    ));
     unawaited(_pump());
     return id;
   }
@@ -76,8 +72,7 @@ class DownloadManager {
   Future<void> pause(String id) async {
     final task = await _repository.getById(id);
     if (task == null ||
-        (task.status != DownloadStatus.downloading &&
-            task.status != DownloadStatus.queued)) {
+        (task.status != DownloadStatus.downloading && task.status != DownloadStatus.queued)) {
       return;
     }
     _tokens[id]?.cancel('paused');
@@ -90,9 +85,8 @@ class DownloadManager {
 
   Future<void> resume(String id) async {
     final task = await _repository.getById(id);
-    if (task == null) return;
-    if (task.status != DownloadStatus.paused &&
-        task.status != DownloadStatus.failed) {
+    if (task == null ||
+        (task.status != DownloadStatus.paused && task.status != DownloadStatus.failed)) {
       return;
     }
     await _repository.upsert(task.copyWith(
@@ -110,12 +104,10 @@ class DownloadManager {
     _tokens[id]?.cancel('cancelled');
     final task = await _repository.getById(id);
     if (task == null) return;
-
     for (final suffix in const ['.part', '.video.part', '.audio.part']) {
       final file = File('${task.destinationPath}$suffix');
       if (await file.exists()) await file.delete();
     }
-
     await _repository.upsert(task.copyWith(
       status: DownloadStatus.cancelled,
       downloadedBytes: 0,
@@ -151,10 +143,11 @@ class DownloadManager {
         await _runSingle(task, token);
       }
     } on DioException catch (error) {
-      await _markFailure(task.id, error.type == DioExceptionType.cancel
-          ? null
-          : _friendlyError(error),
-          paused: error.type == DioExceptionType.cancel);
+      await _markFailure(
+        task.id,
+        error.type == DioExceptionType.cancel ? null : _friendlyError(error),
+        paused: error.type == DioExceptionType.cancel,
+      );
     } on DownloadEngineException catch (error) {
       await _markFailure(task.id, error.message);
     } on MediaMuxerException catch (error) {
@@ -175,46 +168,56 @@ class DownloadManager {
       url: task.media.sourceUrl,
       partPath: partPath,
       cancelToken: token,
-      onProgress: (downloaded, total, speed) =>
-          _updateProgress(task.id, downloaded, total, speed),
+      onProgress: (downloaded, total, speed) {
+        unawaited(_updateProgress(task.id, downloaded, total, speed));
+      },
     );
     await _complete(task, partPath, result.downloadedBytes,
         result.totalBytes ?? task.totalBytes);
   }
 
   Future<void> _runMuxed(DownloadTask task, CancelToken token) async {
-    final audioUrl = task.secondarySourceUrl!;
     final videoPart = '${task.destinationPath}.video.part';
     final audioPart = '${task.destinationPath}.audio.part';
+    var videoDownloaded = await _fileLength(videoPart);
+    var audioDownloaded = await _fileLength(audioPart);
     await _setDownloading(task);
 
-    final videoExisting = await _fileLength(videoPart);
-    final audioExisting = await _fileLength(audioPart);
     final videoResult = await _engine.download(
       url: task.media.sourceUrl,
       partPath: videoPart,
       cancelToken: token,
       onProgress: (downloaded, total, speed) {
-        final audioBytes = _fileLengthSync(audioPart);
-        _updateProgress(task.id, downloaded + audioBytes,
-            total == null ? task.totalBytes : total + (task.secondarySizeBytes ?? 0), speed);
+        videoDownloaded = downloaded;
+        unawaited(_updateProgress(
+          task.id,
+          videoDownloaded + audioDownloaded,
+          task.totalBytes ?? (total == null ? null : total + (task.secondarySizeBytes ?? 0)),
+          speed,
+        ));
       },
     );
+    videoDownloaded = videoResult.downloadedBytes;
 
     final audioResult = await _engine.download(
-      url: audioUrl,
+      url: task.secondarySourceUrl!,
       partPath: audioPart,
       cancelToken: token,
       onProgress: (downloaded, total, speed) {
-        final videoBytes = _fileLengthSync(videoPart);
-        _updateProgress(task.id, videoBytes + downloaded,
-            task.totalBytes ?? ((total ?? 0) + videoResult.downloadedBytes), speed);
+        audioDownloaded = downloaded;
+        unawaited(_updateProgress(
+          task.id,
+          videoDownloaded + audioDownloaded,
+          task.totalBytes ?? (total == null ? null : total + videoDownloaded),
+          speed,
+        ));
       },
     );
+    audioDownloaded = audioResult.downloadedBytes;
 
     if (token.isCancelled) {
       throw DioException.requestCancelled(
-        requestOptions: RequestOptions(path: audioUrl),
+        requestOptions: RequestOptions(path: task.secondarySourceUrl!),
         reason: 'تم إيقاف التنزيل.',
       );
     }
@@ -224,14 +227,19 @@ class DownloadManager {
       audioPath: audioPart,
       outputPath: task.destinationPath,
     );
-
     await File(videoPart).delete();
     await File(audioPart).delete();
-    await _complete(task, task.destinationPath,
-        videoResult.downloadedBytes + audioResult.downloadedBytes,
-        task.totalBytes);
-    // Silence analyzer about values intentionally used to validate resume files.
-    if (videoExisting < 0 || audioExisting < 0) return;
+
+    final current = await _repository.getById(task.id);
+    if (current == null || current.status == DownloadStatus.cancelled) return;
+    await _repository.upsert(current.copyWith(
+      status: DownloadStatus.completed,
+      downloadedBytes: videoDownloaded + audioDownloaded,
+      totalBytes: task.totalBytes,
+      speedBytesPerSecond: 0,
+      updatedAt: DateTime.now(),
+      clearError: true,
+    ));
   }
 
   Future<void> _setDownloading(DownloadTask task) async {
@@ -260,13 +268,11 @@ class DownloadManager {
     if (current == null || current.status == DownloadStatus.cancelled) return;
     final destination = File(task.destinationPath);
     final part = File(partPath);
-    if (part.path != destination.path) {
-      if (!await part.exists()) {
-        throw const DownloadEngineException('ملف التنزيل المؤقت غير موجود.');
-      }
-      if (await destination.exists()) await destination.delete();
-      await part.rename(destination.path);
+    if (!await part.exists()) {
+      throw const DownloadEngineException('ملف التنزيل المؤقت غير موجود.');
     }
+    if (await destination.exists()) await destination.delete();
+    await part.rename(destination.path);
     await _repository.upsert(current.copyWith(
       status: DownloadStatus.completed,
       downloadedBytes: downloaded,
@@ -293,8 +299,6 @@ class DownloadManager {
     final file = File(path);
     return await file.exists() ? file.length() : 0;
   }
-
-  int _fileLengthSync(String path) => 0;
 
   String _friendlyError(DioException error) {
     if (error.type == DioExceptionType.connectionError ||
