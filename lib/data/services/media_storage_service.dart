@@ -41,6 +41,7 @@ class MediaStorageService {
       'audio/x-wav': 'wav',
       'audio/ogg': 'ogg',
       'audio/opus': 'opus',
+      'audio/webm': 'webm',
       'audio/flac': 'flac',
       'video/mp4': 'mp4',
       'video/webm': 'webm',
