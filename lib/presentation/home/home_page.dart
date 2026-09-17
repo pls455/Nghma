@@ -89,6 +89,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     var type = media.videoFormats.isNotEmpty
         ? MediaFormatType.video
         : MediaFormatType.audio;
+    MediaFormat? selected;
 
     await showModalBottomSheet<void>(
       context: context,
@@ -100,7 +101,10 @@ class _HomePageState extends ConsumerState<HomePage> {
             final formats = type == MediaFormatType.video
                 ? media.videoFormats
                 : media.audioFormats;
-            final selected = formats.isEmpty ? null : formats.first;
+            selected ??= formats.isEmpty ? null : formats.first;
+            if (selected != null && !formats.contains(selected)) {
+              selected = formats.isEmpty ? null : formats.first;
+            }
 
             return SafeArea(
               child: Padding(
@@ -146,9 +150,10 @@ class _HomePageState extends ConsumerState<HomePage> {
                             selected: type == MediaFormatType.video,
                             onSelected: media.videoFormats.isEmpty
                                 ? null
-                                : (_) => setModalState(
-                                      () => type = MediaFormatType.video,
-                                    ),
+                                : (_) => setModalState(() {
+                                      type = MediaFormatType.video;
+                                      selected = null;
+                                    }),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -161,9 +166,10 @@ class _HomePageState extends ConsumerState<HomePage> {
                             selected: type == MediaFormatType.audio,
                             onSelected: media.audioFormats.isEmpty
                                 ? null
-                                : (_) => setModalState(
-                                      () => type = MediaFormatType.audio,
-                                    ),
+                                : (_) => setModalState(() {
+                                      type = MediaFormatType.audio;
+                                      selected = null;
+                                    }),
                           ),
                         ),
                       ],
@@ -179,12 +185,23 @@ class _HomePageState extends ConsumerState<HomePage> {
                     if (formats.isEmpty)
                       const Text('لا توجد صيغة متاحة لهذا النوع.')
                     else
-                      InputDecorator(
+                      DropdownButtonFormField<MediaFormat>(
+                        value: selected,
+                        isExpanded: true,
                         decoration: const InputDecoration(
                           border: OutlineInputBorder(),
                           prefixIcon: Icon(Icons.high_quality_outlined),
                         ),
-                        child: Text(selected?.label ?? 'جودة المصدر'),
+                        items: formats
+                            .map(
+                              (format) => DropdownMenuItem<MediaFormat>(
+                                value: format,
+                                child: Text(_formatLabel(format)),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) =>
+                            setModalState(() => selected = value),
                       ),
                     const SizedBox(height: 16),
                     SizedBox(
@@ -192,7 +209,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       child: FilledButton.icon(
                         onPressed: selected == null
                             ? null
-                            : () => _startDownload(media, selected),
+                            : () => _startDownload(media, selected!),
                         icon: const Icon(Icons.download_outlined),
                         label: Text(
                           type == MediaFormatType.video
@@ -203,7 +220,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'تظهر الجودات الفعلية التي يعيدها مصدر المحتوى فقط.',
+                      'الجودات المعروضة هي التي أعادها المصدر فعليًا، بدون اختراع 720p من العدم.',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
@@ -214,6 +231,18 @@ class _HomePageState extends ConsumerState<HomePage> {
         );
       },
     );
+  }
+
+  String _formatLabel(MediaFormat format) {
+    final parts = <String>[];
+    if (format.label?.isNotEmpty == true) parts.add(format.label!);
+    if (format.width != null && format.height != null) {
+      parts.add('${format.width}×${format.height}');
+    }
+    if (format.bitrate != null && format.bitrate! > 0) {
+      parts.add('${(format.bitrate! / 1000).round()} kbps');
+    }
+    return parts.isEmpty ? 'جودة المصدر' : parts.join(' • ');
   }
 
   String _friendlyError(Object error) {
