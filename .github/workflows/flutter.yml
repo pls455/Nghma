@@ -36,10 +36,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          flutter clean
+          flutter pub get
           flutter build apk --release
+
           APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
           if [ ! -f "$APK_PATH" ]; then
-            echo "Release APK was not generated."
+            echo "Expected APK not found. Searching build outputs..."
+            find build -type f -name '*.apk' -print
             exit 1
           fi
           ls -lh "$APK_PATH"
