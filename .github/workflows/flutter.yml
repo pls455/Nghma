@@ -29,31 +29,25 @@ jobs:
       - name: Test
         run: flutter test
 
-      - name: Build release APK (Android ARM64)
+      - name: Generate Android project files
+        run: flutter create --platforms=android --project-name nghma .
+
+      - name: Build release APK
         shell: bash
         run: |
           set -euo pipefail
-          flutter precache --android
-          cd android
-          chmod +x gradlew
-          ./gradlew :app:assembleRelease --no-daemon --stacktrace
-          cd ..
-          APK_PATH="$(find . -type f -path '*outputs/apk/release/*.apk' -print -quit)"
-          if [ -z "$APK_PATH" ]; then
-            APK_PATH="$(find . -type f -name '*.apk' -print -quit)"
-          fi
-          if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
-            echo "No release APK was generated."
+          flutter build apk --release
+          APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
+          if [ ! -f "$APK_PATH" ]; then
+            echo "Release APK was not generated."
             exit 1
           fi
-          mkdir -p build/app/outputs/flutter-apk
-          cp "$APK_PATH" build/app/outputs/flutter-apk/app-release.apk
-          ls -lh build/app/outputs/flutter-apk/app-release.apk
+          ls -lh "$APK_PATH"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: nghma-release-apk-arm64
+          name: nghma-release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
