@@ -21,12 +21,7 @@ class SqliteDownloadRepository implements DownloadRepository {
   @override
   Future<DownloadTask?> getById(String id) async {
     final db = await _database.database;
-    final rows = await db.query(
-      'downloads',
-      where: 'id = ?',
-      whereArgs: [id],
-      limit: 1,
-    );
+    final rows = await db.query('downloads', where: 'id = ?', whereArgs: [id], limit: 1);
     if (rows.isEmpty) return null;
     return _fromRow(rows.first);
   }
@@ -34,11 +29,7 @@ class SqliteDownloadRepository implements DownloadRepository {
   @override
   Future<void> upsert(DownloadTask task) async {
     final db = await _database.database;
-    await db.insert(
-      'downloads',
-      _toRow(task),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert('downloads', _toRow(task), conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   @override
@@ -52,6 +43,8 @@ class SqliteDownloadRepository implements DownloadRepository {
       'id': task.id,
       'title': task.media.title,
       'source_url': task.media.sourceUrl,
+      'secondary_source_url': task.secondarySourceUrl,
+      'secondary_size_bytes': task.secondarySizeBytes,
       'mime_type': task.media.mimeType,
       'duration_ms': task.media.duration?.inMilliseconds,
       'size_bytes': task.media.sizeBytes,
@@ -82,8 +75,7 @@ class SqliteDownloadRepository implements DownloadRepository {
         title: row['title']! as String,
         sourceUrl: row['source_url']! as String,
         mimeType: row['mime_type'] as String?,
-        duration:
-            durationMs == null ? null : Duration(milliseconds: durationMs),
+        duration: durationMs == null ? null : Duration(milliseconds: durationMs),
         sizeBytes: row['size_bytes'] as int?,
         thumbnailUrl: row['thumbnail_url'] as String?,
       ),
@@ -91,6 +83,8 @@ class SqliteDownloadRepository implements DownloadRepository {
       status: status,
       downloadedBytes: row['downloaded_bytes']! as int,
       totalBytes: row['total_bytes'] as int?,
+      secondarySourceUrl: row['secondary_source_url'] as String?,
+      secondarySizeBytes: row['secondary_size_bytes'] as int?,
       speedBytesPerSecond: row['speed_bytes_per_second']! as int,
       createdAt: DateTime.parse(row['created_at']! as String),
       updatedAt: DateTime.parse(row['updated_at']! as String),
