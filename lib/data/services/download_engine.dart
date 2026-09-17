@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -6,8 +7,46 @@ class DownloadEngine {
   DownloadEngine({Dio? dio}) : _dio = dio ?? Dio();
 
   final Dio _dio;
+  static const _maxAttempts = 4;
 
   Future<DownloadResult> download({
+    required String url,
+    required String partPath,
+    required CancelToken cancelToken,
+    required void Function(int downloadedBytes, int? totalBytes, int speed)
+        onProgress,
+  }) async {
+    DioException? lastError;
+
+    for (var attempt = 1; attempt <= _maxAttempts; attempt++) {
+      try {
+        return await _downloadAttempt(
+          url: url,
+          partPath: partPath,
+          cancelToken: cancelToken,
+          onProgress: onProgress,
+        );
+      } on DioException catch (error) {
+        lastError = error;
+        if (error.type == DioExceptionType.cancel || attempt == _maxAttempts) {
+          rethrow;
+        }
+        await Future<void>.delayed(Duration(milliseconds: 500 * attempt));
+      } on DownloadEngineException catch (error) {
+        lastError = DioException(
+          requestOptions: RequestOptions(path: url),
+          error: error,
+        );
+        if (attempt == _maxAttempts) rethrow;
+        await Future<void>.delayed(Duration(milliseconds: 500 * attempt));
+      }
+    }
+
+    throw lastError ??
+        const DownloadEngineException('فشل التنزيل بعد عدة محاولات.');
+  }
+
+  Future<DownloadResult> _downloadAttempt({
     required String url,
     required String partPath,
     required CancelToken cancelToken,
@@ -79,6 +118,11 @@ class DownloadEngine {
       await sink.flush();
     } finally {
       await sink.close();
+    }
+
+    if (totalBytes != null && downloaded < totalBytes) {
+      onProgress(downloaded, totalBytes, 0);
+      throw const DownloadEngineException('انقطع الاتصال قبل اكتمال الملف.');
     }
 
     final averageSpeed = _averageSpeed(
