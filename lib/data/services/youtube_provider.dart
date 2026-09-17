@@ -60,7 +60,7 @@ class YoutubeProvider implements ContentProvider {
             label: stream.qualityLabel.isEmpty
                 ? '${(stream.bitrate.kiloBitsPerSecond).round()} kbps'
                 : stream.qualityLabel,
-            mimeType: _mimeForContainer(stream.container.name),
+            mimeType: _mimeForContainer(stream.container.name, audio: true),
             sizeBytes: stream.size.totalBytes,
             bitrate: stream.bitrate.bitsPerSecond,
           ),
@@ -84,12 +84,12 @@ class YoutubeProvider implements ContentProvider {
     }
   }
 
-  String _mimeForContainer(String container) {
+  String _mimeForContainer(String container, {bool audio = false}) {
     switch (container.toLowerCase()) {
       case 'mp4':
-        return 'video/mp4';
+        return audio ? 'audio/mp4' : 'video/mp4';
       case 'webm':
-        return 'video/webm';
+        return audio ? 'audio/webm' : 'video/webm';
       case 'm3u8':
         return 'application/vnd.apple.mpegurl';
       case '3gpp':
