@@ -15,6 +15,7 @@ final homeDownloadManagerProvider = Provider<DownloadManager>((ref) => DownloadM
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
+
   @override
   ConsumerState<HomePage> createState() => _HomePageState();
 }
@@ -23,11 +24,18 @@ class _HomePageState extends ConsumerState<HomePage> {
   final _controller = TextEditingController();
 
   @override
-  void dispose() { _controller.dispose(); super.dispose(); }
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   Future<void> _analyze() async {
     final value = _controller.text.trim();
-    if (value.isEmpty) { _showMessage('أدخل رابط المحتوى أولاً.'); return; }
+    if (value.isEmpty) {
+      _showMessage('أدخل رابط المحتوى أولاً.');
+      return;
+    }
+
     ref.read(homeAnalysisProvider.notifier).state = const AsyncLoading();
     try {
       final media = await ref.read(analyzeMediaUrlProvider)(value);
@@ -54,6 +62,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       thumbnailUrl: media.thumbnailUrl,
       formats: [format],
     );
+
     try {
       final destinationPath = await storage.createDestinationPath(selectedMedia);
       await manager.enqueue(
@@ -66,7 +75,11 @@ class _HomePageState extends ConsumerState<HomePage> {
       if (!mounted) return;
       ref.invalidate(downloadsControllerProvider);
       Navigator.pop(context);
-      _showMessage(audioFormat == null ? 'أضيف المحتوى إلى قائمة التنزيلات ويستمر في الخلفية.' : 'أضيف الفيديو، وسيتم تنزيل الصوت والفيديو بالتوازي ثم دمجهما.');
+      _showMessage(
+        audioFormat == null
+            ? 'أضيف المحتوى إلى قائمة التنزيلات ويستمر في الخلفية.'
+            : 'أضيف الفيديو، وسيتم تنزيل الصوت والفيديو بالتوازي ثم دمجهما.',
+      );
     } catch (_) {
       if (!mounted) return;
       _showMessage('تعذر تجهيز ملف التنزيل. تحقق من مساحة التخزين.');
@@ -87,6 +100,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           final formats = type == MediaFormatType.video ? media.videoFormats : media.audioFormats;
           final selected = type == MediaFormatType.video ? selectedVideo : selectedAudio;
           final canMux = type == MediaFormatType.video && selectedVideo != null && media.audioFormats.isNotEmpty;
+
           return SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
@@ -94,23 +108,52 @@ class _HomePageState extends ConsumerState<HomePage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('تم تحليل المحتوى', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                  Text(
+                    'تم تحليل المحتوى',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+                  ),
                   const SizedBox(height: 14),
-                  Card(child: ListTile(
-                    leading: const CircleAvatar(child: Icon(Icons.movie)),
-                    title: Text(media.title),
-                    subtitle: Text(media.sourceUrl, maxLines: 2, overflow: TextOverflow.ellipsis),
-                  )),
+                  Card(
+                    child: ListTile(
+                      leading: const CircleAvatar(child: Icon(Icons.movie)),
+                      title: Text(media.title),
+                      subtitle: Text(media.sourceUrl, maxLines: 2, overflow: TextOverflow.ellipsis),
+                    ),
+                  ),
                   const SizedBox(height: 14),
-                  Text('نوع التنزيل', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                  Text(
+                    'نوع التنزيل',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                  ),
                   const SizedBox(height: 8),
-                  Row(children: [
-                    Expanded(child: ChoiceChip(label: const SizedBox(width: double.infinity, child: Center(child: Text('🎬 فيديو'))), selected: type == MediaFormatType.video, onSelected: media.videoFormats.isEmpty ? null : (_) => setModalState(() { type = MediaFormatType.video; }))),
-                    const SizedBox(width: 10),
-                    Expanded(child: ChoiceChip(label: const SizedBox(width: double.infinity, child: Center(child: Text('🎵 صوت'))), selected: type == MediaFormatType.audio, onSelected: media.audioFormats.isEmpty ? null : (_) => setModalState(() { type = MediaFormatType.audio; }))),
-                  ]),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ChoiceChip(
+                          label: const SizedBox(width: double.infinity, child: Center(child: Text('🎬 فيديو'))),
+                          selected: type == MediaFormatType.video,
+                          onSelected: media.videoFormats.isEmpty
+                              ? null
+                              : (_) => setModalState(() => type = MediaFormatType.video),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ChoiceChip(
+                          label: const SizedBox(width: double.infinity, child: Center(child: Text('🎵 صوت'))),
+                          selected: type == MediaFormatType.audio,
+                          onSelected: media.audioFormats.isEmpty
+                              ? null
+                              : (_) => setModalState(() => type = MediaFormatType.audio),
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 14),
-                  Text('الجودة', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                  Text(
+                    'الجودة',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                  ),
                   const SizedBox(height: 8),
                   if (formats.isEmpty)
                     const Text('لا توجد صيغة متاحة لهذا النوع.')
@@ -118,23 +161,56 @@ class _HomePageState extends ConsumerState<HomePage> {
                     DropdownButtonFormField<MediaFormat>(
                       value: selected,
                       isExpanded: true,
-                      decoration: const InputDecoration(border: OutlineInputBorder(), prefixIcon: Icon(Icons.high_quality_outlined)),
-                      items: formats.map((format) => DropdownMenuItem<MediaFormat>(value: format, child: Text(_formatLabel(format)))).toList(),
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.high_quality_outlined),
+                      ),
+                      items: formats
+                          .map(
+                            (format) => DropdownMenuItem<MediaFormat>(
+                              value: format,
+                              child: Text(_formatLabel(format)),
+                            ),
+                          )
+                          .toList(),
                       onChanged: (value) {
                         if (value == null) return;
                         setModalState(() {
-                          if (type == MediaFormatType.video) { selectedVideo = value; } else { selectedAudio = value; }
+                          if (type == MediaFormatType.video) {
+                            selectedVideo = value;
+                          } else {
+                            selectedAudio = value;
+                          }
                         });
                       },
                     ),
                   if (canMux) ...[
                     const SizedBox(height: 10),
-                    Text('سيتم تنزيل مسار الفيديو والصوت بالتوازي ثم دمجهما في ملف واحد.', style: Theme.of(context).textTheme.bodySmall),
+                    Text(
+                      'سيتم تنزيل مسار الفيديو والصوت بالتوازي ثم دمجهما في ملف واحد.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ],
                   const SizedBox(height: 16),
-                  SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: selected == null ? null : () => _startDownload(media, selected, audioFormat: canMux ? selectedAudio : null), icon: const Icon(Icons.download_outlined), label: Text(type == MediaFormatType.video ? 'تنزيل الفيديو' : 'تنزيل النغمة'))),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: selected == null
+                          ? null
+                          : () => _startDownload(
+                                media,
+                                selected,
+                                audioFormat: canMux ? selectedAudio : null,
+                              ),
+                      icon: const Icon(Icons.download_outlined),
+                      label: Text(type == MediaFormatType.video ? 'تنزيل الفيديو' : 'تنزيل النغمة'),
+                    ),
+                  ),
                   const SizedBox(height: 4),
-                  Text('التنزيل يستمر في الخلفية مع إشعار يوضح التقدم.', style: Theme.of(context).textTheme.bodySmall),
+                  Text(
+                    'التنزيل يستمر في الخلفية مع إشعار يوضح التقدم.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 ],
               ),
             ),
@@ -159,50 +235,109 @@ class _HomePageState extends ConsumerState<HomePage> {
     return 'تعذر تحليل الرابط. تحقق منه وحاول مرة أخرى.';
   }
 
-  void _showMessage(String message) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final analysis = ref.watch(homeAnalysisProvider);
-    return SafeArea(child: CustomScrollView(slivers: [
-      SliverPadding(padding: const EdgeInsets.fromLTRB(20, 24, 20, 28), sliver: SliverToBoxAdapter(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('نغمة', style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800)),
-        const SizedBox(height: 4),
-        Text('الصق الرابط، اختر النوع والجودة، ثم نزّل الملف.', style: theme.textTheme.bodyMedium),
-        const SizedBox(height: 28),
-        Card(child: Padding(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('رابط الفيديو', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 12),
-          TextField(controller: _controller, keyboardType: TextInputType.url, textDirection: TextDirection.ltr, decoration: const InputDecoration(hintText: 'https://youtube.com/watch?v=...', prefixIcon: Icon(Icons.link)), onSubmitted: (_) => _analyze()),
-          const SizedBox(height: 12),
-          SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: analysis.isLoading ? null : _analyze, icon: analysis.isLoading ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.manage_search), label: Text(analysis.isLoading ? 'جارٍ التحليل...' : 'تحليل الرابط'))),
-        ]))),
-        const SizedBox(height: 24),
-        Text('النشاط الأخير', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
-        const SizedBox(height: 10),
-        const _EmptySection(icon: Icons.history, title: 'لا يوجد نشاط بعد', subtitle: 'التنزيلات المكتملة ستظهر هنا.'),
-      ])),
-    ]));
+
+    return SafeArea(
+      child: CustomScrollView(
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 28),
+            sliver: SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('نغمة', style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 4),
+                  Text('الصق الرابط، اختر النوع والجودة، ثم نزّل الملف.', style: theme.textTheme.bodyMedium),
+                  const SizedBox(height: 28),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(18),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('رابط الفيديو', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: _controller,
+                            keyboardType: TextInputType.url,
+                            textDirection: TextDirection.ltr,
+                            decoration: const InputDecoration(
+                              hintText: 'https://youtube.com/watch?v=...',
+                              prefixIcon: Icon(Icons.link),
+                            ),
+                            onSubmitted: (_) => _analyze(),
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton.icon(
+                              onPressed: analysis.isLoading ? null : _analyze,
+                              icon: analysis.isLoading
+                                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                                  : const Icon(Icons.manage_search),
+                              label: Text(analysis.isLoading ? 'جارٍ التحليل...' : 'تحليل الرابط'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text('النشاط الأخير', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 10),
+                  const _EmptySection(
+                    icon: Icons.history,
+                    title: 'لا يوجد نشاط بعد',
+                    subtitle: 'التنزيلات المكتملة ستظهر هنا.',
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
 class _EmptySection extends StatelessWidget {
   const _EmptySection({required this.icon, required this.title, required this.subtitle});
+
   final IconData icon;
   final String title;
   final String subtitle;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Card(child: Padding(padding: const EdgeInsets.all(22), child: Row(children: [
-      Icon(icon, size: 30, color: theme.colorScheme.primary),
-      const SizedBox(width: 14),
-      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-        const SizedBox(height: 4),
-        Text(subtitle, style: theme.textTheme.bodySmall),
-      ])),
-    ])));
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(22),
+        child: Row(
+          children: [
+            Icon(icon, size: 30, color: theme.colorScheme.primary),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 4),
+                  Text(subtitle, style: theme.textTheme.bodySmall),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
